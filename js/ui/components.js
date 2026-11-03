@@ -20,6 +20,8 @@ const ICONS = {
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
   chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+  list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
 };
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -83,7 +85,7 @@ export function stageTrack({ stages, position, shipSize = 46 }) {
       const cls = reached ? (current ? 'current' : 'reached') : '';
       return `<div class="track-stop ${cls}" style="left:${(i / last) * 100}%">
         <div class="track-dot">${reached && !current && i > 0 ? icon('check', 18, 3.5) : i + 1}</div>
-        <div class="track-label"><b>${esc(s.label)}</b>${s.count != null ? `<span>${s.count} ${s.count === 1 ? 'ticket' : 'tickets'}</span>` : ''}</div>
+        <div class="track-label"><b>${esc(s.label)}</b>${s.count != null ? `<span>${s.count}</span>` : ''}</div>
       </div>`;
     }).join('')}
     <div class="track-ship" style="left:${pct}%">${shipMarker(shipSize)}</div>

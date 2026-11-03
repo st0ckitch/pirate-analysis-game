@@ -495,12 +495,16 @@ export class World {
    * `length` units, centred, and its keel sits at `draft` below the waterline.
    */
   async loadShipModel(url, { length = 6.2, draft = 0.35, flip = false, yaw = 0, deckHeight = 0.42 } = {}) {
-    const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+    const [{ GLTFLoader }, { MeshoptDecoder }, { DRACOLoader }] = await Promise.all([
       import('three/addons/loaders/GLTFLoader.js'),
       import('three/addons/libs/meshopt_decoder.module.js'),
+      import('three/addons/loaders/DRACOLoader.js'),
     ]);
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
+    const draco = new DRACOLoader();
+    draco.setDecoderPath(new URL('../../vendor/three-addons/libs/draco/gltf/', import.meta.url).href);
+    loader.setDRACOLoader(draco);
     const gltf = await loader.loadAsync(url);
     const model = gltf.scene;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });

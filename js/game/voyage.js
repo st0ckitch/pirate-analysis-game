@@ -11,9 +11,9 @@ export const DAYS = 10;
 // flow: river speed (units/s). rowChance: chance a spawn is a full-width wall with one narrow gap.
 // gapMargin: clearance each side of the ship inside the gap (smaller = tighter). spawnDist: how far ahead items appear.
 const DIFFICULTY = {
-  calm: { flow: 9, interval: 1.0, hazard: 0.28, steer: 15, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12 },
-  rapids: { flow: 13, interval: 0.72, hazard: 0.38, steer: 18, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12 },
-  hardcore: { flow: 44, interval: 0.42, hazard: 0.5, steer: 24, rowChance: 0.72, gapMargin: 0.7, spawnDist: 50, invuln: 0.8, crateRate: 0.9, orb: 0.28 },
+  calm: { flow: 9, interval: 1.0, hazard: 0.28, steer: 15, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12, hp: 8 },
+  rapids: { flow: 13, interval: 0.72, hazard: 0.38, steer: 18, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12, hp: 6 },
+  hardcore: { flow: 44, interval: 0.42, hazard: 0.5, steer: 24, rowChance: 0.72, gapMargin: 0.7, spawnDist: 50, invuln: 0.8, crateRate: 0.9, orb: 0.28, hp: 5 },
 };
 
 export class Voyage {
@@ -33,6 +33,9 @@ export class Voyage {
     this.spawnTimer = 1.5;
     this.pollTimer = 14;
     this.invuln = 0;
+    this.maxHp = this.cfg.hp;
+    this.hp = this.maxHp;
+    this.sink = 0;
     this.items = [];
     this.input = 0;
     this.pointerZ = null;
@@ -66,6 +69,18 @@ export class Voyage {
     if (this.state === 'running') {
       this.elapsed += dt;
       if (this.elapsed >= this.duration) return this.finish(false);
+    }
+
+    // Shipwreck: roll over and go under, then report.
+    if (this.state === 'sinking') {
+      this.sink += dt;
+      const k = Math.min(1, this.sink / 2.2);
+      this.world.ship.position.y = -k * k * 3.2;
+      this.world.ship.rotation.x = k * 0.9;
+      this.world.ship.rotation.z = k * 0.35;
+      if (this.sink > 2.6) { this.state = 'ended'; this.emit({ type: 'end', result: this.result(false, true) }); }
+      this.world.setReached(this.position);
+      return;
     }
 
     // Forward motion: sail toward the point-weighted progress.
@@ -118,7 +133,7 @@ export class Voyage {
     const s = this.ship;
     const x = Math.min(s.x + this.cfg.spawnDist, 252);
     if (x - s.x < 20) return; // too close to the falls to be fair
-    const anyBlocked = this.tickets.some(t => t.blocked);
+    const anyBlocked = this.tickets.some(t => t.blocked) || this.hp < this.maxHp;
     if (this.cfg.rowChance && Math.random() < this.cfg.rowChance) return this.spawnRow(x);
     const r = Math.random();
     let type;
@@ -144,7 +159,7 @@ export class Voyage {
         this.items.push({ type, x, z, obj: this.world.spawn(type, x, z) });
       }
     }
-    const reward = this.tickets.some(t => t.blocked) && Math.random() < 0.4 ? 'orb' : 'crate';
+    const reward = (this.tickets.some(t => t.blocked) || this.hp < this.maxHp) && Math.random() < 0.4 ? 'orb' : 'crate';
     this.items.push({ type: reward, x, z: gap, obj: this.world.spawn(reward, x, gap) });
   }
 
@@ -169,6 +184,7 @@ export class Voyage {
       it.dead = true;
       this.stats.orbs++;
       this.world.burst(it.x, 1.2, it.z, C.glow300, 24, 7);
+      if (this.hp < this.maxHp) { this.hp++; this.emit({ type: 'heal', hp: this.hp, at: [s.x, 3.2, s.z] }); }
       const ev = clearBlocker(this.tickets, this.focusKey);
       if (ev) { this.emit({ ...ev, at: [it.x, 2, it.z] }); this.sync(ev.ticket, 'unflag'); }
     } else if (this.invuln <= 0) {
@@ -177,9 +193,11 @@ export class Voyage {
       this.world.shake(0.9);
       this.world.burst(s.x, 1, s.z, C.wood300, 20, 6);
       s.vz = -Math.sign(it.z - s.z || 1) * 10;
+      this.hp = Math.max(0, this.hp - 1);
       const ev = blockRandom(this.tickets);
-      this.emit({ type: 'hit', ticket: ev?.ticket, at: [s.x, 2, s.z] });
+      this.emit({ type: 'hit', ticket: ev?.ticket, hp: this.hp, at: [s.x, 2, s.z] });
       if (ev) this.sync(ev.ticket, 'flag');
+      if (this.hp <= 0) this.wreck();
     }
   }
 
@@ -218,18 +236,36 @@ export class Voyage {
     return applied;
   }
 
-  finish(complete) {
-    if (this.state !== 'running') return;
-    this.state = complete ? 'finishing' : 'ended';
-    for (const it of this.items) it.dead = true;
-    const result = () => ({
+  result(complete, wrecked = false) {
+    return {
       complete,
-      stars: starsFor(this.tickets),
+      wrecked,
+      // A wreck caps the voyage at 1 star, however far the sprint got.
+      stars: wrecked ? Math.min(1, starsFor(this.tickets)) : starsFor(this.tickets),
       ...totals(this.tickets),
       stats: { ...this.stats },
       daysUsed: this.day,
       tickets: this.tickets,
-    });
+    };
+  }
+
+  wreck() {
+    if (this.state !== 'running') return;
+    this.state = 'sinking';
+    this.sink = 0;
+    for (const it of this.items) it.dead = true;
+    this.world.shipInner.visible = true;
+    this.world.shake(1.6);
+    this.world.burst(this.ship.x, 1, this.ship.z, C.wood500, 40, 8);
+    this.world.setCameraMode('finish');
+    this.emit({ type: 'wrecked' });
+  }
+
+  finish(complete) {
+    if (this.state !== 'running') return;
+    this.state = complete ? 'finishing' : 'ended';
+    for (const it of this.items) it.dead = true;
+    const result = () => this.result(complete);
     if (complete) {
       this.world.setCameraMode('finish');
       this.emit({ type: 'complete' });
@@ -243,5 +279,7 @@ export class Voyage {
     this.state = 'ended';
     this.world.clearItems();
     this.world.shipInner.visible = true;
+    this.world.ship.position.y = 0;
+    this.world.ship.rotation.set(0, 0, 0);
   }
 }

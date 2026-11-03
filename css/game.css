@@ -289,3 +289,55 @@ kbd { display: inline-block; min-width: 26px; padding: 3px 7px; border-radius: 6
   .menu-buttons .btn-lg { --h: 56px; --fs: 22px; --edge: 5px; }
   .menu-foot { display: none; }
 }
+
+/* ---------- HUD v2: keep the river clear ---------- */
+.hud-top-left { width: min(380px, calc(100vw - 24px - 116px)); padding: 12px 16px; }
+.hud-title { font-size: var(--text-md); margin-bottom: 8px; }
+.hud-meta { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.hud-meta .days { flex: 1; margin-top: 0; }
+.hull { display: flex; gap: 2px; color: oklch(1 0 0 / 0.25); }
+.hull span.on { color: var(--coral-400); filter: drop-shadow(0 1px 0 var(--coral-600)); }
+.hull span.on svg { fill: var(--coral-400); }
+.hull.low span.on { animation: hullPulse 0.8s ease-in-out infinite; }
+@keyframes hullPulse { 50% { transform: scale(1.25); } }
+
+.hud-bottom { padding: 8px 12px 0; }
+.cargo { height: auto; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.cargo-col { position: static; transform: none; width: auto; min-width: 0; display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end; gap: 4px; height: 44px; overflow: hidden; }
+.cargo-col .crate { --edge: 3px; --bw: 2px; border-radius: 6px; }
+.cargo-col .crate-label { border-radius: 4px; font-size: calc(var(--s) * 0.38); }
+.cargo-col .crate-band { top: 12%; height: 18%; }
+.cargo-more { flex: none; height: 26px; min-width: 34px; padding: 0 8px; margin-bottom: 6px; border: 0; border-radius: var(--radius-pill); cursor: pointer; font: 700 13px/1 var(--font-display); color: var(--ink-900); background: linear-gradient(180deg, var(--parchment-50), var(--parchment-200)); box-shadow: 0 3px 0 var(--wood-500); }
+.hud-bottom .track { height: 18px; margin: 18px 40px 30px; }
+.hud-bottom .track-stop { top: 9px; }
+.hud-bottom .track-dot { left: -14px; top: -14px; width: 28px; height: 28px; font-size: 14px; }
+.hud-bottom .track-label { top: 18px; display: flex; justify-content: center; align-items: baseline; gap: 6px; }
+.hud-bottom .track-label b { font-size: 13px; }
+.hud-bottom .track-label span { font: 700 12px/1 var(--font-display); padding: 2px 7px; border-radius: 999px; background: oklch(1 0 0 / 0.18); }
+.hud-bottom .track-ship { top: calc(9px - var(--ship) * 0.75); }
+
+/* Event log: a slim feed on the left, under the sprint panel. */
+.toasts { left: clamp(12px, 2.5vw, 32px); top: clamp(140px, 22vh, 170px); transform: none; justify-items: start; width: min(320px, calc(100vw - 24px)); gap: 6px; }
+.toast { padding: 6px 12px 6px 8px; font-size: 13px; border-width: 2px; box-shadow: 0 3px 0 oklch(0.18 0.04 170 / 0.8); opacity: 0.92; }
+.toast .badge { height: 20px; font-size: 12px; padding: 0 8px; }
+.toast:nth-child(n+3) { opacity: 0.6; }
+
+.hit-flash { position: absolute; inset: 0; pointer-events: none !important; opacity: 0; }
+.hit-flash.hurt { animation: hurt 0.45s ease-out; box-shadow: inset 0 0 120px 30px oklch(0.6 0.2 28 / 0.75); }
+.hit-flash.wreck { animation: hurt 2.4s ease-out forwards; box-shadow: inset 0 0 220px 80px oklch(0.45 0.18 28 / 0.85); }
+@keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+.stage-list { display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.stage-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; border: 0; border-radius: var(--radius-md); background: var(--parchment-200); cursor: pointer; font: 600 14px/1.3 var(--font-body); color: var(--ink-900); }
+.stage-row:hover { background: var(--parchment-300); }
+.stage-row .k { font-family: var(--font-display); color: var(--ink-500); flex: none; }
+.stage-row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-row .p { flex: none; font-family: var(--font-display); }
+
+@media (max-width: 760px) {
+  .cargo-col { height: 34px; }
+  .hud-bottom .track { margin: 16px 20px 28px; }
+  .hud-bottom .track-label { flex-direction: column; align-items: center; gap: 2px; }
+  .toasts { top: auto; bottom: 150px; }
+  .touch-controls { bottom: 160px; }
+}

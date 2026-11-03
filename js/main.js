@@ -163,7 +163,7 @@ function renderHud() {
       ${iconButton('pause', 'Pause', { variant: 'ghost', action: 'pause' })}
     </div>
     <div class="toasts" id="toasts"></div>
-    <div class="glass hint" id="hint">Steer with <kbd>←</kbd> <kbd>→</kbd> or drag · catch crates · dodge rocks</div>
+    <div class="glass hint" id="hint">Steer with <kbd>←</kbd> <kbd>→</kbd> or drag · catch crates · dodge rocks · orbs repair the hull</div>
     <div class="touch-controls">
       ${iconButton('chevronLeft', 'Steer left', { variant: 'ghost', size: 72, attrs: 'data-steer="-1"' })}
       ${iconButton('chevronRight', 'Steer right', { variant: 'ghost', size: 72, attrs: 'data-steer="1"' })}
@@ -173,6 +173,7 @@ function renderHud() {
       <div id="track-wrap">${stageTrack({ stages: STATUSES.map(l => ({ label: l, count: 0 })), position: v.position, shipSize: 46 })}</div>
     </div>
     <div id="pops"></div>
+    <div class="hit-flash" id="hit-flash"></div>
   </div><div id="modal-root"></div>`;
   updateHud(true);
   setTimeout(() => document.getElementById('hint')?.classList.add('hide'), 5500);
@@ -186,22 +187,30 @@ function updateHud(first = false) {
   if (prog) {
     prog.innerHTML = `<div class="hud-title"><span>Sprint ${app.sprint.number} · ${esc(app.sprint.name)}</span><span class="hud-day" id="hud-day"></span></div>
       ${progressBar({ value: done, max: total, size: 'lg', onGlass: true, valueText: `${done} / ${total} pts` })}
-      <div class="days" id="days">${Array.from({ length: DAYS }, () => '<i></i>').join('')}</div>`;
+      <div class="hud-meta"><div class="hull" id="hull" aria-label="Hull"></div><div class="days" id="days">${Array.from({ length: DAYS }, () => '<i></i>').join('')}</div></div>`;
+    updateHull();
     app.lastDay = null;
     updateClock();
   }
   const cargo = document.getElementById('cargo');
   if (cargo) {
-    const narrow = innerWidth < 760;
-    const scale = narrow ? 0.48 : innerHeight < 700 ? 0.6 : 0.72;
-    cargo.innerHTML = STATUSES.map((_, i) => `<div class="cargo-col" style="left:${(i / 3) * 100}%">${
-      v.tickets.filter(t => t.stage === i).map(t => {
+    // One slim row per stage. Crates are small and uniform; overflow collapses into a "+N" chip.
+    const colW = (cargo.clientWidth || innerWidth) / 4;
+    const cell = innerWidth < 760 ? 26 : 34;
+    const fit = Math.max(1, Math.floor((colW - 8) / (cell + 4)));
+    cargo.innerHTML = STATUSES.map((_, i) => {
+      const list = v.tickets.filter(t => t.stage === i)
+        .sort((a, b) => (b.key === v.focusKey) - (a.key === v.focusKey) || b.blocked - a.blocked || b.points - a.points);
+      const shown = list.length > fit ? list.slice(0, fit - 1) : list;
+      const more = list.length - shown.length;
+      return `<div class="cargo-col">${shown.map(t => {
         const moved = !first && app.prevStages[t.key] !== t.stage;
         return `<div class="${moved ? 'drop' : ''}">${crate({
-          points: t.points, done: i === DONE, blocked: t.blocked, focused: v.focusKey === t.key, selected: app.openTicket === t.key, scale,
-          key: t.key, title: `${t.key} · ${t.title}${t.blocked ? ' (blocked)' : ''}`, work: t.work, effort: effortFor(t.points),
+          points: t.points, done: i === DONE, blocked: t.blocked, focused: v.focusKey === t.key, selected: app.openTicket === t.key,
+          scale: cell / ({ 1: 44, 2: 52, 3: 60, 5: 74, 8: 90, 13: 108 }[t.points] || 60), key: t.key, title: `${t.key} · ${t.title} · ${t.points} pts${t.blocked ? ' (blocked)' : ''}`, work: t.work, effort: effortFor(t.points),
         })}</div>`;
-      }).join('')}</div>`).join('');
+      }).join('')}${more > 0 ? `<button class="cargo-more" data-stage="${i}" title="Show all ${list.length} tickets">+${more}</button>` : ''}</div>`;
+    }).join('');
     app.prevStages = Object.fromEntries(v.tickets.map(t => [t.key, t.stage]));
   }
   // Track: update in place so the ship glides.
@@ -216,7 +225,7 @@ function updateHud(first = false) {
       el.className = `track-stop ${reached ? (current ? 'current' : 'reached') : ''}`;
       el.querySelector('.track-dot').innerHTML = reached && !current && i > 0 ? icon('check', 18, 3.5) : String(i + 1);
       const n = v.tickets.filter(t => t.stage === i).length;
-      el.querySelector('.track-label span').textContent = `${n} ${n === 1 ? 'ticket' : 'tickets'}`;
+      el.querySelector('.track-label span').textContent = String(n);
     });
   }
 }
@@ -247,6 +256,33 @@ function updateClock() {
   }
 }
 
+function updateHull() {
+  const v = app.voyage, el = document.getElementById('hull');
+  if (!v || !el) return;
+  el.innerHTML = Array.from({ length: v.maxHp }, (_, i) => `<span class="${i < v.hp ? 'on' : ''}">${icon('heart', 16, 2.5)}</span>`).join('');
+  el.classList.toggle('low', v.hp <= 2);
+  el.title = `Hull ${v.hp} / ${v.maxHp}`;
+}
+
+function flash(cls) {
+  const f = document.getElementById('hit-flash');
+  if (!f) return;
+  f.className = 'hit-flash'; void f.offsetWidth; f.className = `hit-flash ${cls}`;
+}
+
+function stageListModal(i) {
+  const v = app.voyage;
+  if (!v) return;
+  v.paused = true;
+  app.modal = 'stage';
+  const list = v.tickets.filter(t => t.stage === i);
+  modal(`<div class="panel titled" data-stop><div class="panel-title">${esc(STATUSES[i])} · ${list.length}</div>
+    <div class="stage-list">${list.map(t => `<button class="stage-row" data-open-ticket="${esc(t.key)}">
+      <span class="k">${esc(t.key)}</span><span class="t">${esc(t.title)}</span>${t.blocked ? badge('blocked', { size: 'sm' }) : ''}<span class="p">${t.points} pts</span></button>`).join('')}</div>
+    <div class="row">${button('Close', { variant: 'secondary', size: 'sm', action: 'close-modal' })}</div>
+  </div>`);
+}
+
 function toast(html, tone = '') {
   const box = document.getElementById('toasts');
   if (!box) return;
@@ -254,7 +290,7 @@ function toast(html, tone = '') {
   el.className = `glass toast ${tone}`;
   el.innerHTML = html;
   box.prepend(el);
-  while (box.children.length > 3) box.lastChild.remove();
+  while (box.children.length > 4) box.lastChild.remove();
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 600); }, 3200);
 }
 
@@ -288,6 +324,8 @@ function onVoyageEvent(ev) {
       break;
     case 'hit':
       sfx.hit();
+      flash('hurt');
+      updateHull();
       pop(t ? `${t.key} blocked!` : 'Bump!', 'bad', ev.at);
       if (t) toast(`${badge('blocked', { size: 'sm' })}<span>${esc(t.key)} hit an impediment</span>`);
       break;
@@ -295,6 +333,16 @@ function onVoyageEvent(ev) {
       ev.remote ? sfx.remote() : sfx.orb();
       if (!ev.remote) pop(`${t.key} unblocked`, 'glow', ev.at);
       toast(`${badge(STATUS_KEYS[t.stage], { size: 'sm' })}<span>${esc(t.key)} blocker cleared${ev.remote ? ` <span class="who">· by ${esc(ev.remote)}</span>` : ''}</span>`);
+      break;
+    case 'heal':
+      pop('+1 hull', 'glow', ev.at);
+      updateHull();
+      break;
+    case 'wrecked':
+      sfx.lose();
+      flash('wreck');
+      updateHull();
+      toast(`${badge('blocked', { size: 'sm' })}<span>Hull breached. The ship is going down!</span>`);
       break;
     case 'miss':
       sfx.miss();
@@ -377,7 +425,7 @@ function closeModal() {
 
 async function showResults(r) {
   const s = app.sprint;
-  r.complete ? null : sfx.lose();
+  if (!r.complete && !r.wrecked) sfx.lose();
   const prev = progress.stars[s.id] || 0;
   progress.stars[s.id] = Math.max(prev, r.stars);
   let unlocked = null;
@@ -391,8 +439,10 @@ async function showResults(r) {
   app.screen = 'results';
   app.modal = 'results';
   const pct = r.total ? Math.round((r.done / r.total) * 100) : 0;
-  const title = r.complete ? 'Sprint complete!' : r.stars >= 2 ? 'Nearly there!' : 'Sprint ended';
-  const sub = r.complete ? `Every ticket reached Done in ${r.daysUsed} ${r.daysUsed === 1 ? 'day' : 'days'}.` : `Time's up. ${pct}% of story points reached Done.`;
+  const title = r.complete ? 'Sprint complete!' : r.wrecked ? 'Shipwrecked!' : r.stars >= 2 ? 'Nearly there!' : 'Sprint ended';
+  const sub = r.complete ? `Every ticket reached Done in ${r.daysUsed} ${r.daysUsed === 1 ? 'day' : 'days'}.`
+    : r.wrecked ? `Your hull gave out on day ${r.daysUsed}. ${pct}% of story points reached Done.`
+    : `Time's up. ${pct}% of story points reached Done.`;
   const rows = r.tickets.slice().sort((a, b) => b.stage - a.stage).map(t => `<div><span><span class="k">${esc(t.key)}</span>${esc(t.title)}</span>${badge(statusKey(t), { size: 'sm' })}</div>`).join('');
   ui.innerHTML = `<div class="screen"><div id="modal-root"></div></div>`;
   modal(`<div class="panel titled results" data-stop><div class="panel-title">Sprint ${s.number} · ${esc(s.name)}</div>
@@ -428,6 +478,10 @@ function leaveVoyage() {
 
 // ---------- input ----------
 ui.addEventListener('click', async e => {
+  const moreEl = e.target.closest('[data-stage]');
+  if (moreEl && app.screen === 'hud') { sfx.click(); return stageListModal(+moreEl.dataset.stage); }
+  const rowEl = e.target.closest('[data-open-ticket]');
+  if (rowEl && app.voyage) { app.modal = null; app.voyage.paused = false; return openTicket(rowEl.dataset.openTicket); }
   const crateEl = e.target.closest('[data-ticket]');
   if (crateEl && app.screen === 'hud' && !crateEl.closest('.modal')) return openTicket(crateEl.dataset.ticket);
   const card = e.target.closest('[data-sprint]');
@@ -441,7 +495,7 @@ ui.addEventListener('click', async e => {
   const a = el.dataset.action;
   if (a === 'modal-bg') {
     if (e.target !== el) return; // click inside the panel
-    if (app.modal === 'ticket' || app.modal === 'help' || app.modal === 'settings') { if (app.screen === 'hud' && app.modal === 'help') return pauseMenu(); return closeModal(); }
+    if (app.modal === 'ticket' || app.modal === 'stage' || app.modal === 'help' || app.modal === 'settings') { if (app.screen === 'hud' && app.modal === 'help') return pauseMenu(); return closeModal(); }
     return;
   }
   unlockAudio();
@@ -545,6 +599,10 @@ function frame(now) {
 
 // ---------- boot ----------
 (async function boot() {
+  // Start loading the GLB ship right away; the built-in boat stays if it's missing or fails.
+  const ship = world.loadShipModel(SHIP_MODEL.url, SHIP_MODEL)
+    .then(info => { console.info('Ship model loaded', info); return info; })
+    .catch(e => { console.info(`No ship model at ${SHIP_MODEL.url}; using the built-in boat.`, e?.message || ''); });
   const fonts = document.fonts?.ready?.catch(() => {}) ?? Promise.resolve();
   const live = await detectLiveJira();
   if (live.client) { jira = live.client; jiraInfo = { live: true, name: live.board.name, writable: live.writable }; }
@@ -553,16 +611,14 @@ function frame(now) {
   catch (e) { // live Jira failed after detection: fall back to mock so the game still opens
     jira = mockJira; jiraInfo = { live: false, name: BOARD.name, error: e.message }; await loadSprints();
   }
+  // Keep the loading screen up until the ship is ready (at most 15s on slow connections).
+  await Promise.race([ship, new Promise(r => setTimeout(r, 15000))]);
   app.selectedSprint = defaultSprint()?.id;
   setScreen('menu');
   requestAnimationFrame(t => { last = t; frame(t); });
   const l = document.getElementById('loading');
   l.classList.add('hide');
   setTimeout(() => l.remove(), 800);
-  // Swap in the GLB ship if one is present; keep the built-in boat if it's missing or fails.
-  world.loadShipModel(SHIP_MODEL.url, SHIP_MODEL)
-    .then(info => console.info('Ship model loaded', info))
-    .catch(() => console.info(`No ship model at ${SHIP_MODEL.url}; using the built-in boat.`));
   // Debug hook for automated checks.
   window.__sv = { app, world };
 })();
