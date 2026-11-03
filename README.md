@@ -39,3 +39,8 @@ client with the same methods to go live.
 ```bash
 npm test
 ```
+
+## Ship model
+Put a `.glb` at `assets/ship.glb` and the game uses it instead of the built-in boat. It is auto-oriented,
+scaled and placed on the water; tweak `js/game/shipConfig.js` if it faces backwards or sits too high/low.
+Meshopt-compressed GLBs are supported. Keep it small (a few MB) so the game loads fast.

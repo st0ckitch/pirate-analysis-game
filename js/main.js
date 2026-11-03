@@ -1,4 +1,5 @@
 import { World, LANE, STAGE_X } from './game/world.js';
+import { SHIP_MODEL } from './game/shipConfig.js';
 import { Voyage, DAYS } from './game/voyage.js';
 import { ticketsFromIssues, totals, effortFor, DONE } from './game/sprintModel.js';
 import { jira as mockJira } from './jira/mockJiraClient.js';
@@ -558,6 +559,10 @@ function frame(now) {
   const l = document.getElementById('loading');
   l.classList.add('hide');
   setTimeout(() => l.remove(), 800);
+  // Swap in the GLB ship if one is present; keep the built-in boat if it's missing or fails.
+  world.loadShipModel(SHIP_MODEL.url, SHIP_MODEL)
+    .then(info => console.info('Ship model loaded', info))
+    .catch(() => console.info(`No ship model at ${SHIP_MODEL.url}; using the built-in boat.`));
   // Debug hook for automated checks.
   window.__sv = { app, world };
 })();

@@ -75,6 +75,12 @@ function haloTexture(color) {
   });
 }
 
+function countTris(obj) {
+  let n = 0;
+  obj.traverse(o => { if (o.isMesh) n += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+  return Math.round(n);
+}
+
 export class World {
   constructor(canvas) {
     this.canvas = canvas;
@@ -412,6 +418,10 @@ export class World {
     const ship = new THREE.Group();
     const inner = new THREE.Group();
     ship.add(inner);
+    // Procedural stand-in boat. Hidden when a GLB ship model loads (see loadShipModel).
+    const body = new THREE.Group();
+    inner.add(body);
+    this.placeholderBody = body;
     const wood5 = new THREE.MeshLambertMaterial({ color: C.wood500, flatShading: true });
     const wood3 = new THREE.MeshLambertMaterial({ color: C.wood300, flatShading: true });
     const wood7 = new THREE.MeshLambertMaterial({ color: C.wood700, flatShading: true });
@@ -428,7 +438,7 @@ export class World {
     for (const y of [0.35, 0.7]) {
       const plank = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.08, 2.46), wood7);
       plank.position.set(0.05, y, 0);
-      inner.add(plank);
+      body.add(plank);
     }
     const deck = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.16, 2.0), wood3);
     deck.position.set(0.1, 0.98, 0);
@@ -450,7 +460,7 @@ export class World {
     const flag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), new THREE.MeshLambertMaterial({ color: C.coral400, side: THREE.DoubleSide }));
     flag.position.set(0.25, 6.45, 0);
     this.flag = flag;
-    inner.add(hull, deck, trimL, trimR, mast, boom, sail, jib, flag);
+    body.add(hull, deck, trimL, trimR, mast, boom, sail, jib, flag);
     this.sail = sail;
 
     // Cargo: crates stack up on deck as tickets reach Done.
@@ -477,6 +487,59 @@ export class World {
     this.ship = ship; this.shipInner = inner;
     ship.position.set(STAGE_X[0], 0, 0);
     this.scene.add(ship);
+  }
+
+  /**
+   * Replace the stand-in boat with a glTF model. The model is auto-fitted: its
+   * longest horizontal axis is turned to point along the river, it is scaled to
+   * `length` units, centred, and its keel sits at `draft` below the waterline.
+   */
+  async loadShipModel(url, { length = 6.2, draft = 0.35, flip = false, yaw = 0, deckHeight = 0.42 } = {}) {
+    const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/libs/meshopt_decoder.module.js'),
+    ]);
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    const gltf = await loader.loadAsync(url);
+    const model = gltf.scene;
+    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    // Orient: bow along +X (the direction the ship sails).
+    let box = new THREE.Box3().setFromObject(model);
+    let size = box.getSize(new THREE.Vector3());
+    if (size.z > size.x) model.rotation.y = Math.PI / 2;
+    model.rotation.y += (flip ? Math.PI : 0) + yaw;
+    model.updateMatrixWorld(true);
+
+    // Scale + place.
+    box = new THREE.Box3().setFromObject(model);
+    size = box.getSize(new THREE.Vector3());
+    const k = length / Math.max(size.x, 1e-6);
+    model.scale.multiplyScalar(k);
+    model.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(model);
+    const c = box.getCenter(new THREE.Vector3());
+    model.position.x -= c.x;
+    model.position.z -= c.z;
+    model.position.y -= box.min.y + draft;
+
+    const holder = new THREE.Group();
+    holder.add(model);
+    this.shipInner.add(holder);
+    this.placeholderBody.visible = false;
+    this.flag = this.sail = null;
+    this.customShip = holder;
+
+    // Put the cargo crates on the model's deck.
+    const h = box.max.y - box.min.y;
+    const deckY = -draft + h * deckHeight;
+    this.cargo.forEach((cr, i) => {
+      const s = cr.geometry.parameters.width;
+      cr.position.y = deckY + s / 2 + (i >= 6 ? 0.62 : 0);
+      cr.position.x *= length / 5.4;
+    });
+    return { triangles: countTris(model), size: size.multiplyScalar(k) };
   }
 
   setCargo(n) { this.cargo.forEach((c, i) => { c.visible = i < n; }); }
@@ -613,8 +676,8 @@ export class World {
     this.shipInner.position.y = Math.sin(t * 2.4) * 0.12 + 0.05;
     this.shipInner.rotation.x = Math.sin(t * 2.4) * 0.04 + ship.roll;
     this.shipInner.rotation.z = Math.sin(t * 1.7) * 0.03 - ship.speed * 0.006;
-    this.flag.rotation.y = Math.sin(t * 8) * 0.25;
-    this.sail.scale.x = 1 + Math.sin(t * 3) * 0.03;
+    if (this.flag) this.flag.rotation.y = Math.sin(t * 8) * 0.25;
+    if (this.sail) this.sail.scale.x = 1 + Math.sin(t * 3) * 0.03;
     this.wake.material.opacity = 0.35 + Math.min(0.4, Math.abs(ship.speed) * 0.05);
     this.wake.scale.x = 1 + Math.min(1.2, Math.abs(ship.speed) * 0.1);
 
