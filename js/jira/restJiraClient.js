@@ -17,7 +17,7 @@ async function api(path, opts = {}) {
 export async function detectLiveJira() {
   try {
     const cfg = await api('/api/config');
-    return cfg.live ? { client: new RestJiraClient(cfg.board), board: cfg.board } : { client: null, error: cfg.error };
+    return cfg.live ? { client: new RestJiraClient(cfg.board), board: cfg.board, writable: !!cfg.writable } : { client: null, error: cfg.error };
   } catch { return { client: null }; } // static hosting without the server: mock mode
 }
 

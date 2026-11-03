@@ -46,14 +46,14 @@ test('normalisation maps statuses, points, flags and ADF', () => {
 test('proxy loads sprints and issues, transitions, and flags via fallback', async () => {
   const fj = await fakeJira();
   const jira = new JiraCloud({ baseUrl: fj.url, email: 'me@x.com', token: 'tok', storyPointsField: 'customfield_10016', flagField: 'customfield_10021' });
-  const app = createServer(jira);
+  const app = createServer(jira, { allowWrites: true });
   await new Promise(r => app.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${app.address().port}`;
   const get = async p => (await fetch(base + p)).json();
   const post = async (p, b) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
 
   const cfg = await get('/api/config');
-  assert.deepEqual(cfg, { live: true, board: { id: 9, name: 'ABC board' } });
+  assert.deepEqual(cfg, { live: true, board: { id: 9, name: 'ABC board' }, writable: true });
 
   const sprints = await get('/api/jira/sprints');
   assert.deepEqual(sprints.map(s => [s.id, s.number, s.state]), [[1, 1, 'closed'], [2, 2, 'active']]);
@@ -93,4 +93,17 @@ test('without config the API reports mock mode', async () => {
   assert.deepEqual(await (await fetch(base + '/api/config')).json(), { live: false });
   assert.equal((await fetch(base + '/api/jira/sprints')).status, 503);
   app.close();
+});
+
+test('writes are refused unless explicitly allowed', async () => {
+  const fj = await fakeJira();
+  const app = createServer(new JiraCloud({ baseUrl: fj.url, email: 'me@x.com', token: 'tok', storyPointsField: 'customfield_10016', flagField: 'customfield_10021' }));
+  await new Promise(r => app.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${app.address().port}`;
+  const r = await fetch(base + '/api/jira/issues/ABC-1/transition', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"status":"Done"}' });
+  assert.equal(r.status, 403);
+  assert.ok(!fj.calls.some(c => c.startsWith('POST')));
+  assert.equal((await (await fetch(base + '/api/config')).json()).writable, false);
+  assert.equal(await (await fetch(base + '/healthz')).text(), 'ok');
+  app.close(); fj.srv.close();
 });

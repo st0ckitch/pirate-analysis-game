@@ -44,3 +44,9 @@ npm test
 Put a `.glb` at `assets/ship.glb` and the game uses it instead of the built-in boat. It is auto-oriented,
 scaled and placed on the water; tweak `js/game/shipConfig.js` if it faces backwards or sits too high/low.
 Meshopt-compressed GLBs are supported. Keep it small (a few MB) so the game loads fast.
+
+## Deploy on Railway
+`railway.json` runs `node server/server.mjs` with a `/healthz` health check. Set the `JIRA_*` variables from
+`.env.example` on the service to load your board; without them the game uses mock data.
+Writing to Jira is off on the server unless `JIRA_ALLOW_WRITES=true`. Keep it off on a public URL, since anyone who
+can open the site could otherwise move your tickets.

@@ -124,7 +124,7 @@ function settingsHtml() {
   return `<div class="panel titled" data-stop><div class="panel-title">Settings</div>
     <div class="setting"><span>Sound</span>${seg('sound', settings.sound, [[true, 'On'], [false, 'Off']])}</div>
     <div class="setting"><span>River current<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Hardcore: torrent speed, walls of rocks with tiny gaps</small></span>${seg('difficulty', settings.difficulty, [['calm', 'Calm'], ['rapids', 'Rapids'], ['hardcore', 'Hardcore']])}</div>
-    ${jiraInfo.live ? `<div class="setting"><span>Write changes to Jira<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Off: the game never edits your tickets</small></span>${seg('writeBack', settings.writeBack, [[true, 'On'], [false, 'Off']])}</div>` : ''}
+    ${jiraInfo.live && jiraInfo.writable ? `<div class="setting"><span>Write changes to Jira<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Off: the game never edits your tickets</small></span>${seg('writeBack', settings.writeBack, [[true, 'On'], [false, 'Off']])}</div>` : ''}
     <div class="setting"><span>Saved stars and unlocks</span>${button('Reset', { variant: 'danger', size: 'sm', action: 'reset-progress' })}</div>
     <div class="row">${button('Done', { size: 'sm', action: 'close-modal' })}</div>
   </div>`;
@@ -147,7 +147,7 @@ async function startVoyage(sprintId) {
   app.prevStages = Object.fromEntries(tickets.map(t => [t.key, t.stage]));
   app.syncCooldown = 0;
   app.voyage = new Voyage(world, {
-    sprint: s, tickets, difficulty: settings.difficulty, jira, writeBack: !fresh && settings.writeBack && jiraInfo.live || (!jiraInfo.live && !fresh), onEvent: onVoyageEvent,
+    sprint: s, tickets, difficulty: settings.difficulty, jira, writeBack: !fresh && settings.writeBack && jiraInfo.live && jiraInfo.writable || (!jiraInfo.live && !fresh), onEvent: onVoyageEvent,
   });
   app.screen = 'hud';
   app.modal = null;
@@ -547,7 +547,7 @@ function frame(now) {
 (async function boot() {
   const fonts = document.fonts?.ready?.catch(() => {}) ?? Promise.resolve();
   const live = await detectLiveJira();
-  if (live.client) { jira = live.client; jiraInfo = { live: true, name: live.board.name }; }
+  if (live.client) { jira = live.client; jiraInfo = { live: true, name: live.board.name, writable: live.writable }; }
   else if (live.error) jiraInfo.error = live.error;
   try { await Promise.all([loadSprints(), Promise.race([fonts, new Promise(r => setTimeout(r, 1500))])]); }
   catch (e) { // live Jira failed after detection: fall back to mock so the game still opens
