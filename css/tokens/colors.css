@@ -1,0 +1,62 @@
+:root {
+  /* Leaf: primary / progress / done */
+  --leaf-100: oklch(0.95 0.06 130);
+  --leaf-300: oklch(0.82 0.16 130);
+  --leaf-500: oklch(0.68 0.18 135);
+  --leaf-600: oklch(0.58 0.16 140);
+  --leaf-700: oklch(0.45 0.12 145);
+  /* Water + sky: river, in-progress, cool surfaces */
+  --water-300: oklch(0.82 0.08 200);
+  --water-500: oklch(0.65 0.10 205);
+  --water-700: oklch(0.42 0.08 215);
+  --sky-300: oklch(0.88 0.07 230);
+  --sky-500: oklch(0.76 0.12 235);
+  /* Parchment + wood: panels, crates, ship */
+  --parchment-50: oklch(0.975 0.015 90);
+  --parchment-100: oklch(0.95 0.03 88);
+  --parchment-200: oklch(0.90 0.05 85);
+  --parchment-300: oklch(0.83 0.07 80);
+  --wood-300: oklch(0.68 0.09 65);
+  --wood-500: oklch(0.52 0.09 55);
+  --wood-700: oklch(0.38 0.07 50);
+  --wood-800: oklch(0.30 0.05 48);
+  /* Accents */
+  --coral-400: oklch(0.70 0.15 30);
+  --coral-600: oklch(0.55 0.17 28);
+  --sun-300: oklch(0.88 0.13 90);
+  --sun-500: oklch(0.78 0.15 80);
+  --sun-700: oklch(0.60 0.12 70);
+  --glow-300: oklch(0.90 0.14 170);
+  --glow-500: oklch(0.78 0.16 165);
+  /* Ink + stone */
+  --ink-900: oklch(0.25 0.04 170);
+  --ink-700: oklch(0.38 0.05 165);
+  --ink-500: oklch(0.46 0.05 165);
+  --stone-300: oklch(0.84 0.02 100);
+  --stone-500: oklch(0.62 0.03 100);
+
+  /* Semantic */
+  --surface-panel: var(--parchment-100);
+  --surface-panel-raised: var(--parchment-50);
+  --surface-wood: var(--wood-500);
+  --surface-glass: oklch(0.25 0.04 170 / 0.58);
+  --text-body: var(--ink-900);
+  --text-muted: var(--ink-500);
+  --text-on-wood: var(--parchment-50);
+  --text-on-glass: var(--parchment-50);
+  --border-trim: var(--wood-700);
+  --action-primary: var(--leaf-500);
+  --action-danger: var(--coral-400);
+  --focus-ring: var(--sun-500);
+
+  /* Jira status mapping */
+  --status-todo: var(--stone-300);
+  --status-progress: var(--water-300);
+  --status-review: var(--sun-300);
+  --status-done: var(--leaf-300);
+  --status-blocked: var(--coral-400);
+
+  /* Scene backdrops (placeholders until 3D renders are dropped in) */
+  --bg-sky: linear-gradient(180deg, var(--sky-500) 0%, var(--sky-300) 55%, oklch(0.93 0.05 150) 100%);
+  --bg-river: linear-gradient(180deg, var(--water-500) 0%, var(--water-700) 100%);
+}
