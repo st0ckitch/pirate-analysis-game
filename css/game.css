@@ -181,6 +181,7 @@ button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px
 .menu-buttons { display: flex; flex-direction: column; gap: 18px; margin-top: clamp(28px, 7vh, 56px); width: min(320px, 100%); }
 .menu-foot { position: absolute; left: 16px; bottom: 12px; font: 500 12px/1.4 var(--font-body); color: rgb(255 255 255 / 0.9); text-shadow: 0 1px 2px rgb(0 0 0 / 0.4); }
 .menu-jira { position: absolute; right: 24px; top: 24px; display: flex; align-items: center; gap: 10px; padding: 10px 16px; font: 600 14px/1.2 var(--font-display); }
+.dot.off { background: var(--sun-500); box-shadow: 0 0 0 3px oklch(0.78 0.15 80 / 0.35); }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--glow-500); box-shadow: 0 0 0 3px oklch(0.78 0.16 165 / 0.35); }
 
 .top-bar { position: absolute; left: clamp(16px, 4vw, 48px); right: 16px; top: clamp(16px, 4vh, 40px); display: flex; align-items: center; gap: 20px; }

@@ -8,9 +8,12 @@ import {
 
 export const DAYS = 10;
 
+// flow: river speed (units/s). rowChance: chance a spawn is a full-width wall with one narrow gap.
+// gapMargin: clearance each side of the ship inside the gap (smaller = tighter). spawnDist: how far ahead items appear.
 const DIFFICULTY = {
-  calm: { flow: 9, interval: 1.0, hazard: 0.28, steer: 15 },
-  rapids: { flow: 13, interval: 0.72, hazard: 0.38, steer: 18 },
+  calm: { flow: 9, interval: 1.0, hazard: 0.28, steer: 15, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12 },
+  rapids: { flow: 13, interval: 0.72, hazard: 0.38, steer: 18, rowChance: 0, spawnDist: 74, invuln: 1.4, crateRate: 0.6, orb: 0.12 },
+  hardcore: { flow: 44, interval: 0.42, hazard: 0.5, steer: 24, rowChance: 0.72, gapMargin: 0.7, spawnDist: 50, invuln: 0.8, crateRate: 0.9, orb: 0.28 },
 };
 
 export class Voyage {
@@ -37,7 +40,7 @@ export class Voyage {
 
     // Time budget: enough for a good run to finish if most crates are caught.
     const need = remainingEffort(tickets);
-    const rate = (0.6 / this.cfg.interval) * 0.6;
+    const rate = this.cfg.crateRate * 0.55;
     this.duration = Math.round(Math.min(240, Math.max(60, (need / rate) * 1.15)));
 
     const p = shipPosition(tickets);
@@ -113,19 +116,36 @@ export class Voyage {
 
   spawn() {
     const s = this.ship;
-    const x = Math.min(s.x + 74, 250);
-    if (x - s.x < 26) return; // too close to the falls to be fair
+    const x = Math.min(s.x + this.cfg.spawnDist, 252);
+    if (x - s.x < 20) return; // too close to the falls to be fair
     const anyBlocked = this.tickets.some(t => t.blocked);
+    if (this.cfg.rowChance && Math.random() < this.cfg.rowChance) return this.spawnRow(x);
     const r = Math.random();
     let type;
-    if (anyBlocked && r < 0.12) type = 'orb';
-    else if (r < 0.12 + this.cfg.hazard) type = Math.random() < 0.6 ? 'rock' : 'log';
+    if (anyBlocked && r < this.cfg.orb) type = 'orb';
+    else if (r < this.cfg.orb + this.cfg.hazard) type = Math.random() < 0.6 ? 'rock' : 'log';
     else type = 'crate';
     const z = (Math.random() * 2 - 1) * LANE;
-    // Keep a gap: don't stack a hazard directly on a recent item.
+    // Keep a gap: don't stack an item directly on a recent one.
     const near = this.items.find(it => Math.abs(it.x - x) < 5 && Math.abs(it.z - z) < 4);
     if (near) return;
     this.items.push({ type, x, z, obj: this.world.spawn(type, x, z) });
+  }
+
+  /** A wall of hazards across the whole river with one narrow gap. A reward sits in the gap. */
+  spawnRow(x) {
+    if (this.items.some(it => Math.abs(it.x - x) < 9)) return;
+    const gap = (Math.random() * 2 - 1) * (LANE - 0.5);
+    const type = Math.random() < 0.7 ? 'rock' : 'log';
+    // Rock hits at |dz| < 1.9, log at < 3.3: spacing = hit radius + the clearance left in the gap.
+    const spacing = (type === 'rock' ? 1.9 : 3.3) + this.cfg.gapMargin;
+    for (const dir of [-1, 1]) {
+      for (let z = gap + dir * spacing; Math.abs(z) < LANE + 2.6; z += dir * spacing * 1.05) {
+        this.items.push({ type, x, z, obj: this.world.spawn(type, x, z) });
+      }
+    }
+    const reward = this.tickets.some(t => t.blocked) && Math.random() < 0.4 ? 'orb' : 'crate';
+    this.items.push({ type: reward, x, z: gap, obj: this.world.spawn(reward, x, gap) });
   }
 
   collide(it) {
@@ -153,7 +173,7 @@ export class Voyage {
       if (ev) { this.emit({ ...ev, at: [it.x, 2, it.z] }); this.sync(ev.ticket, 'unflag'); }
     } else if (this.invuln <= 0) {
       this.stats.hits++; this.stats.streak = 0;
-      this.invuln = 1.4;
+      this.invuln = this.cfg.invuln;
       this.world.shake(0.9);
       this.world.burst(s.x, 1, s.z, C.wood300, 20, 6);
       s.vz = -Math.sign(it.z - s.z || 1) * 10;

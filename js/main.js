@@ -1,7 +1,8 @@
 import { World, LANE, STAGE_X } from './game/world.js';
 import { Voyage, DAYS } from './game/voyage.js';
 import { ticketsFromIssues, totals, effortFor, DONE } from './game/sprintModel.js';
-import { jira } from './jira/mockJiraClient.js';
+import { jira as mockJira } from './jira/mockJiraClient.js';
+import { detectLiveJira } from './jira/restJiraClient.js';
 import { STATUSES, STATUS_KEYS, BOARD } from './jira/mockData.js';
 import { sfx, setSound, unlockAudio } from './audio.js';
 import {
@@ -13,9 +14,13 @@ const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
-const settings = Object.assign({ sound: true, difficulty: 'calm' }, store.get('sv-settings', {}));
+const settings = Object.assign({ sound: true, difficulty: 'hardcore', writeBack: false }, store.get('sv-settings', {}));
 const progress = Object.assign({ stars: {}, unlocked: [] }, store.get('sv-progress', {}));
 setSound(settings.sound);
+
+// The data source is chosen at boot: live Jira through our server, or the mock client.
+let jira = mockJira;
+let jiraInfo = { live: false, name: BOARD.name };
 
 // ---------- app state ----------
 const ui = document.getElementById('ui');
@@ -42,7 +47,7 @@ function decorateSprints(list) {
     const allDone = s.totalPoints > 0 && s.donePoints === s.totalPoints;
     let uiState = 'current';
     if (s.state === 'closed' || allDone) uiState = 'complete';
-    else if (s.state === 'future' && !progress.unlocked.includes(s.id)) uiState = 'locked';
+    else if (s.state === 'future' && !jiraInfo.live && !progress.unlocked.includes(s.id)) uiState = 'locked';
     return { ...s, uiState, dates: `${fmtDate(s.startDate)} – ${fmtDate(s.endDate)}`, stars: progress.stars[s.id] || 0 };
   });
 }
@@ -70,8 +75,8 @@ function renderMenu() {
         ${button('Settings', { size: 'lg', variant: 'secondary', ic: 'settings', action: 'settings' })}
       </div>
     </div>
-    <div class="glass menu-jira"><span class="dot"></span> Mock Jira · ${esc(BOARD.name)}${cur ? ` · Sprint ${cur.number}` : ''}</div>
-    <div class="menu-foot">Ticket data is mock Jira data. Your progress is saved in this browser.</div>
+    <div class="glass menu-jira"><span class="dot ${jiraInfo.live ? '' : 'off'}"></span> ${jiraInfo.live ? 'Live Jira' : 'Mock Jira'} · ${esc(jiraInfo.name)}${cur ? ` · ${esc(cur.name)}` : ''}</div>
+    <div class="menu-foot">${jiraInfo.live ? 'Tickets are loaded from your Jira board.' : 'Ticket data is mock Jira data. Add a .env file and run npm start to connect your Jira.'}${jiraInfo.error ? ' Jira error: ' + esc(jiraInfo.error) : ''} Progress is saved in this browser.</div>
   </div><div id="modal-root"></div>`;
 }
 
@@ -117,7 +122,8 @@ function settingsHtml() {
   const seg = (name, val, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-action="set" data-k="${name}" data-v="${v}" class="${String(val) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   return `<div class="panel titled" data-stop><div class="panel-title">Settings</div>
     <div class="setting"><span>Sound</span>${seg('sound', settings.sound, [[true, 'On'], [false, 'Off']])}</div>
-    <div class="setting"><span>River current<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Rapids: faster water, more hazards</small></span>${seg('difficulty', settings.difficulty, [['calm', 'Calm'], ['rapids', 'Rapids']])}</div>
+    <div class="setting"><span>River current<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Hardcore: torrent speed, walls of rocks with tiny gaps</small></span>${seg('difficulty', settings.difficulty, [['calm', 'Calm'], ['rapids', 'Rapids'], ['hardcore', 'Hardcore']])}</div>
+    ${jiraInfo.live ? `<div class="setting"><span>Write changes to Jira<br><small style="font:500 13px var(--font-body);color:var(--ink-500)">Off: the game never edits your tickets</small></span>${seg('writeBack', settings.writeBack, [[true, 'On'], [false, 'Off']])}</div>` : ''}
     <div class="setting"><span>Saved stars and unlocks</span>${button('Reset', { variant: 'danger', size: 'sm', action: 'reset-progress' })}</div>
     <div class="row">${button('Done', { size: 'sm', action: 'close-modal' })}</div>
   </div>`;
@@ -129,7 +135,10 @@ async function startVoyage(sprintId) {
   const s = app.sprints.find(x => x.id === sprintId);
   if (!s || s.uiState === 'locked') return;
   ui.innerHTML = `<div class="screen"><div class="glass hint" style="top:45%">${icon('refresh', 20)} Loading tickets from Jira…</div></div>`;
-  const issues = await jira.getSprintIssues(s.id);
+  let issues;
+  try { issues = await jira.getSprintIssues(s.id); }
+  catch (e) { ui.innerHTML = `<div class="screen"><div id="modal-root"></div></div>`; modal(`<div class="panel titled" data-stop><div class="panel-title">Jira</div><h2>Could not load tickets</h2><p>${esc(e.message)}</p><div class="row">${button('Back', { action: 'sprints' })}</div></div>`); return; }
+  if (!issues.length) { ui.innerHTML = `<div class="screen"><div id="modal-root"></div></div>`; modal(`<div class="panel titled" data-stop><div class="panel-title">Sprint ${s.number}</div><h2>No tickets here</h2><p>This sprint has no issues yet. Pick another voyage.</p><div class="row">${button('Back', { action: 'sprints' })}</div></div>`); return; }
   const fresh = s.uiState === 'complete';
   const tickets = ticketsFromIssues(issues, { fresh });
   app.voyage?.dispose();
@@ -137,7 +146,7 @@ async function startVoyage(sprintId) {
   app.prevStages = Object.fromEntries(tickets.map(t => [t.key, t.stage]));
   app.syncCooldown = 0;
   app.voyage = new Voyage(world, {
-    sprint: s, tickets, difficulty: settings.difficulty, jira, writeBack: !fresh, onEvent: onVoyageEvent,
+    sprint: s, tickets, difficulty: settings.difficulty, jira, writeBack: !fresh && settings.writeBack && jiraInfo.live || (!jiraInfo.live && !fresh), onEvent: onVoyageEvent,
   });
   app.screen = 'hud';
   app.modal = null;
@@ -447,7 +456,7 @@ ui.addEventListener('click', async e => {
     case 'close-modal': closeModal(); break;
     case 'set': {
       const k = el.dataset.k, v = el.dataset.v;
-      settings[k] = k === 'sound' ? v === 'true' : v;
+      settings[k] = k === 'sound' || k === 'writeBack' ? v === 'true' : v;
       setSound(settings.sound);
       store.set('sv-settings', settings);
       modal(settingsHtml());
@@ -536,7 +545,13 @@ function frame(now) {
 // ---------- boot ----------
 (async function boot() {
   const fonts = document.fonts?.ready?.catch(() => {}) ?? Promise.resolve();
-  await Promise.all([loadSprints(), Promise.race([fonts, new Promise(r => setTimeout(r, 1500))])]);
+  const live = await detectLiveJira();
+  if (live.client) { jira = live.client; jiraInfo = { live: true, name: live.board.name }; }
+  else if (live.error) jiraInfo.error = live.error;
+  try { await Promise.all([loadSprints(), Promise.race([fonts, new Promise(r => setTimeout(r, 1500))])]); }
+  catch (e) { // live Jira failed after detection: fall back to mock so the game still opens
+    jira = mockJira; jiraInfo = { live: false, name: BOARD.name, error: e.message }; await loadSprints();
+  }
   app.selectedSprint = defaultSprint()?.id;
   setScreen('menu');
   requestAnimationFrame(t => { last = t; frame(t); });

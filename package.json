@@ -1,0 +1,8 @@
+{
+  "name": "sprint-voyage",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server/server.mjs", "test": "node --test tests/sprintModel.test.mjs tests/jiraServer.test.mjs" },
+  "engines": { "node": ">=18" }
+}
