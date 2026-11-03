@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sprint Voyage</title>
+<meta name="description" content="A 3D jungle-river boat game driven by Jira sprint tickets (mock data).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/game.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="ui"></div>
+<div id="loading" class="loading"><div class="loading-inner"><div class="ship-marker bob" style="--s:120px"><i class="sm-wake"></i><i class="sm-mast"></i><i class="sm-sail"></i><i class="sm-jib"></i><i class="sm-flag"></i><i class="sm-hull"></i><i class="sm-trim"></i></div>Hoisting the sails…</div></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
